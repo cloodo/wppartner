@@ -2,7 +2,8 @@
   "installCommand": "npm install --ignore-optional",
   "framework": null,
   "rewrites": [
-    { "source": "/", "destination": "/api/index" },
+    { "source": "/", "destination": "/api/landing" },
+    { "source": "/dashboard", "destination": "/api/index" },
     { "source": "/woolog", "destination": "/api/woolog" }
   ],
   "crons": [

@@ -1,4 +1,10 @@
 {
+  "buildCommand": "",
+  "installCommand": "npm install --ignore-optional",
+  "framework": null,
+  "rewrites": [
+    { "source": "/", "destination": "/api/index" }
+  ],
   "crons": [
     {
       "path": "/api/cron/pipeline",
@@ -6,9 +12,6 @@
     }
   ],
   "functions": {
-    "api/scrape.ts": { "maxDuration": 300 },
-    "api/generate.ts": { "maxDuration": 300 },
-    "api/publish.ts": { "maxDuration": 60 },
-    "api/cron/pipeline.ts": { "maxDuration": 300 }
+    "api/**/*.ts": { "maxDuration": 300 }
   }
 }

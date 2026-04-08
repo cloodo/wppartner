@@ -1,6 +1,7 @@
 import {
   fetchWooCommercePlugins,
   fetchPluginDetails,
+  type WPPluginInfo,
 } from "./scraper/wordpress-api";
 import {
   parseChangelog,
@@ -17,12 +18,44 @@ import { generatePostContent } from "./content/generator";
 import { createVideo, checkFfmpegAvailable } from "./video/creator";
 import { processPostQueue } from "./publisher/queue";
 
+// Default test plugins — 3 popular WooCommerce plugins for quick testing
+const TEST_PLUGIN_SLUGS = [
+  "woocommerce",
+  "woocommerce-payments",
+  "woo-gutenberg-products-block",
+];
+
+/**
+ * Scrape only specific plugins by slug (for testing or targeted monitoring).
+ */
+export async function runScrapeSpecificPlugins(slugs: string[]): Promise<number> {
+  console.log(`\n=== Scraping ${slugs.length} Specific Plugin(s) ===`);
+
+  const plugins: WPPluginInfo[] = [];
+  for (const slug of slugs) {
+    console.log(`\n  Fetching: ${slug}...`);
+    const details = await fetchPluginDetails(slug);
+    if (details) {
+      plugins.push(details);
+    } else {
+      console.log(`    Could not fetch ${slug}, skipping.`);
+    }
+  }
+
+  console.log(`\nFetched ${plugins.length} plugin(s)`);
+  return processPlugins(plugins);
+}
+
 export async function runScrapeAndDetect(): Promise<number> {
   console.log("\n=== Scraping WooCommerce Plugins ===");
 
   const plugins = await fetchWooCommercePlugins();
   console.log(`Found ${plugins.length} WooCommerce plugins`);
 
+  return processPlugins(plugins);
+}
+
+async function processPlugins(plugins: WPPluginInfo[]): Promise<number> {
   let newChangelogs = 0;
 
   for (const plugin of plugins) {
@@ -35,17 +68,24 @@ export async function runScrapeAndDetect(): Promise<number> {
       homepage: plugin.homepage || null,
     });
 
-    // Fetch full details with changelog
-    console.log(`\n  Checking: ${plugin.name} (${plugin.slug})...`);
-    const details = await fetchPluginDetails(plugin.slug);
+    // If we already have sections.changelog from fetchPluginDetails, use it directly.
+    // Otherwise fetch full details.
+    let changelog = plugin.sections?.changelog;
+    if (!changelog) {
+      console.log(`\n  Checking: ${plugin.name} (${plugin.slug})...`);
+      const details = await fetchPluginDetails(plugin.slug);
 
-    if (!details?.sections?.changelog) {
-      console.log(`    No changelog found, skipping.`);
-      continue;
+      if (!details?.sections?.changelog) {
+        console.log(`    No changelog found, skipping.`);
+        continue;
+      }
+      changelog = details.sections.changelog;
+    } else {
+      console.log(`\n  Processing: ${plugin.name} (${plugin.slug})...`);
     }
 
     // Parse the changelog HTML
-    const entries = parseChangelog(details.sections.changelog);
+    const entries = parseChangelog(changelog);
     const latest = getLatestEntry(entries);
 
     if (!latest) {
@@ -151,6 +191,42 @@ export async function runPublish(): Promise<void> {
   console.log("\n=== Publishing Posts to Facebook ===");
   await processPostQueue();
   console.log("=== Publishing complete. ===\n");
+}
+
+/**
+ * Test pipeline: scrape 3 plugins → generate AI posts → show results.
+ * No Facebook posting — just generates content and displays it.
+ */
+export async function runTestPipeline(slugs?: string[]): Promise<void> {
+  const targetSlugs = slugs && slugs.length > 0 ? slugs : TEST_PLUGIN_SLUGS;
+
+  console.log("========================================");
+  console.log("  WPPartner — TEST MODE");
+  console.log(`  Plugins: ${targetSlugs.join(", ")}`);
+  console.log("========================================");
+
+  // Step 1: Scrape specific plugins
+  const newCount = await runScrapeSpecificPlugins(targetSlugs);
+
+  // Step 2: Generate content
+  if (newCount > 0) {
+    await runContentGeneration();
+  } else {
+    console.log("\n  No new changelogs — trying to generate for existing unposted ones...");
+    await runContentGeneration();
+  }
+
+  // Step 3: Show generated posts (don't actually publish to Facebook)
+  const unposted = getUnpostedChangelogs(10);
+  if (unposted.length > 0) {
+    console.log("\n========================================");
+    console.log("  PREVIEW — Generated Posts:");
+    console.log("========================================\n");
+  }
+
+  console.log("========================================");
+  console.log("  Test complete! Run 'npm run post' to publish to Facebook.");
+  console.log("========================================");
 }
 
 export async function runFullPipeline(): Promise<void> {

@@ -1,5 +1,4 @@
 {
-  "buildCommand": "",
   "installCommand": "npm install --ignore-optional",
   "framework": null,
   "rewrites": [

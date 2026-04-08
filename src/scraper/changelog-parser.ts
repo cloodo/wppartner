@@ -7,6 +7,14 @@ export interface ChangelogEntry {
   rawHtml: string;
 }
 
+/**
+ * Parse changelog from HTML (as returned by WordPress.org Plugin Info API).
+ *
+ * Supports multiple formats:
+ * - <h4>Version - Date</h4> + <ul><li>...</li></ul>  (most common)
+ * - <h3>Version</h3> + <ul>...</ul>
+ * - <p><strong>Version</strong></p> + <ul>...</ul>
+ */
 export function parseChangelog(html: string): ChangelogEntry[] {
   if (!html || html.trim().length === 0) return [];
 
@@ -89,12 +97,74 @@ export function parseChangelog(html: string): ChangelogEntry[] {
   return entries;
 }
 
+/**
+ * Parse changelog from WordPress readme.txt plain text format.
+ *
+ * Format:
+ *   = 9.6.0 - 2025-01-14 =
+ *   * Add - New product collection block
+ *   * Fix - Checkout race condition
+ *
+ *   = 9.5.2 =
+ *   * Fix - Security patch
+ */
+export function parseChangelogFromReadme(text: string): ChangelogEntry[] {
+  if (!text || text.trim().length === 0) return [];
+
+  const entries: ChangelogEntry[] = [];
+  const lines = text.split("\n");
+  let currentEntry: ChangelogEntry | null = null;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    // Version header: = 1.2.3 = or = 1.2.3 - 2024-01-01 =
+    const versionMatch = trimmed.match(/^=\s*(.+?)\s*=$/);
+    if (versionMatch) {
+      if (currentEntry) {
+        entries.push(currentEntry);
+      }
+
+      const parsed = parseVersionHeader(versionMatch[1]);
+      if (parsed) {
+        currentEntry = {
+          version: parsed.version,
+          date: parsed.date,
+          changes: [],
+          rawHtml: `<h4>${versionMatch[1]}</h4>`,
+        };
+      } else {
+        currentEntry = null;
+      }
+      continue;
+    }
+
+    // List item: * Change description or - Change description
+    const itemMatch = trimmed.match(/^[*\-]\s+(.+)$/);
+    if (itemMatch && currentEntry) {
+      currentEntry.changes.push(itemMatch[1]);
+      currentEntry.rawHtml += `\n<li>${itemMatch[1]}</li>`;
+      continue;
+    }
+  }
+
+  // Push the last entry
+  if (currentEntry) {
+    entries.push(currentEntry);
+  }
+
+  return entries;
+}
+
+/**
+ * Parse version string from various header formats:
+ *   "9.0.0 - 2024-06-12"
+ *   "Version 9.0.0"
+ *   "v2.1.3 (2024-01-15)"
+ *   "2.1.3"
+ *   "9.0.0 2024-06-12"
+ */
 function parseVersionHeader(text: string): { version: string; date?: string } | null {
-  // Match patterns like:
-  //   "9.0.0 - 2024-06-12"
-  //   "Version 9.0.0"
-  //   "v2.1.3 (2024-01-15)"
-  //   "2.1.3"
   const versionPattern = /v?(\d+\.\d+(?:\.\d+)?(?:\.\d+)?)/i;
   const match = text.match(versionPattern);
 
@@ -102,7 +172,7 @@ function parseVersionHeader(text: string): { version: string; date?: string } | 
 
   const version = match[1];
 
-  // Try to extract date
+  // Try to extract date in various formats
   const datePattern = /(\d{4}[-/.]\d{1,2}[-/.]\d{1,2})/;
   const dateMatch = text.match(datePattern);
 

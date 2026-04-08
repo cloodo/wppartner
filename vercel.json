@@ -1,0 +1,14 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/pipeline",
+      "schedule": "0 */6 * * *"
+    }
+  ],
+  "functions": {
+    "api/scrape.ts": { "maxDuration": 300 },
+    "api/generate.ts": { "maxDuration": 300 },
+    "api/publish.ts": { "maxDuration": 60 },
+    "api/cron/pipeline.ts": { "maxDuration": 300 }
+  }
+}

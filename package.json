@@ -12,10 +12,16 @@
     "post": "tsx src/cli.ts post",
     "test": "tsx src/cli.ts test"
   },
-  "keywords": ["woocommerce", "wordpress", "changelog", "facebook"],
+  "keywords": [
+    "woocommerce",
+    "wordpress",
+    "changelog",
+    "facebook"
+  ],
   "license": "MIT",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
+    "@vercel/postgres": "^0.10.0",
     "axios": "^1.7.0",
     "better-sqlite3": "^11.0.0",
     "cheerio": "^1.0.0",
@@ -28,6 +34,7 @@
     "@types/fluent-ffmpeg": "^2.1.0",
     "@types/node": "^20.0.0",
     "@types/node-cron": "^3.0.0",
+    "@vercel/node": "^5.7.1",
     "tsx": "^4.0.0",
     "typescript": "^5.5.0"
   }

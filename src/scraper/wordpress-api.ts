@@ -126,6 +126,7 @@ export async function fetchPluginDetails(slug: string): Promise<WPPluginInfo | n
 
   const url = `${config.wordpress.apiBase}?${params.toString()}`;
 
+  // Try API v1.2 first (primary)
   try {
     const response = await axios.get<WPPluginInfo>(url, {
       timeout: 30000,
@@ -133,16 +134,86 @@ export async function fetchPluginDetails(slug: string): Promise<WPPluginInfo | n
     });
     return response.data;
   } catch (err: any) {
-    console.error(`    API failed for ${slug}: ${err.message}`);
+    console.error(`    API v1.2 failed for ${slug}: ${err.message}`);
+  }
 
-    // Fallback: try SVN readme.txt
-    console.log(`    Trying SVN fallback for ${slug}...`);
-    return fetchPluginFromSvn(slug);
+  // Fallback 1: Legacy API v1.0 (simpler URL, different endpoint)
+  console.log(`    Trying legacy API v1.0 for ${slug}...`);
+  try {
+    const legacyResult = await fetchPluginLegacyApi(slug);
+    if (legacyResult) return legacyResult;
+  } catch {
+    // continue to next fallback
+  }
+
+  // Fallback 2: SVN direct file access
+  console.log(`    Trying SVN fallback for ${slug}...`);
+  return fetchPluginFromSvn(slug);
+}
+
+/**
+ * Fallback 1: Legacy Plugin Info API v1.0
+ * Simpler URL format, returns JSON when using .json extension.
+ * URL: https://api.wordpress.org/plugins/info/1.0/{slug}.json
+ */
+async function fetchPluginLegacyApi(slug: string): Promise<WPPluginInfo | null> {
+  const url = `https://api.wordpress.org/plugins/info/1.0/${slug}.json`;
+
+  try {
+    const response = await axios.get<WPPluginInfo>(url, {
+      timeout: 30000,
+      headers: HTTP_HEADERS,
+    });
+    if (response.data && response.data.slug) {
+      return response.data;
+    }
+  } catch {
+    // silent fail — next fallback will handle
+  }
+  return null;
+}
+
+/**
+ * Fetch the Trac SVN commit log RSS feed for a plugin.
+ * URL: https://plugins.trac.wordpress.org/log/{slug}/trunk?format=rss
+ * Useful for detecting recent commits even if changelog hasn't been parsed yet.
+ */
+export async function fetchTracRssFeed(slug: string): Promise<string | null> {
+  const url = `https://plugins.trac.wordpress.org/log/${slug}/trunk?format=rss&limit=10`;
+
+  try {
+    const response = await axios.get<string>(url, {
+      timeout: 15000,
+      headers: { "User-Agent": HTTP_HEADERS["User-Agent"] },
+      responseType: "text",
+    });
+    return response.data;
+  } catch {
+    return null;
   }
 }
 
 /**
- * Fallback: Fetch changelog directly from WordPress.org SVN repository.
+ * Fetch the plugin's development log RSS feed from WordPress.org.
+ * URL: https://wordpress.org/plugins/{slug}/feed/
+ */
+export async function fetchPluginFeed(slug: string): Promise<string | null> {
+  const url = `https://wordpress.org/plugins/${slug}/feed/`;
+
+  try {
+    const response = await axios.get<string>(url, {
+      timeout: 15000,
+      headers: { "User-Agent": HTTP_HEADERS["User-Agent"] },
+      responseType: "text",
+    });
+    return response.data;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Fallback 2: Fetch changelog directly from WordPress.org SVN repository.
  * Files are publicly accessible via HTTP at:
  *   https://plugins.svn.wordpress.org/{slug}/trunk/readme.txt
  *   https://plugins.svn.wordpress.org/{slug}/trunk/changelog.txt
